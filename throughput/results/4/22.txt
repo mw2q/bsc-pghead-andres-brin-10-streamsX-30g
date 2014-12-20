@@ -1,0 +1,80 @@
+BEGIN;
+BEGIN
+EXPLAIN (ANALYZE, BUFFERS)
+select
+	cntrycode,
+	count(*) as numcust,
+	sum(c_acctbal) as totacctbal
+from
+	(
+		select
+			substr(c_phone, 1, 2) as cntrycode,
+			c_acctbal
+		from
+			customer
+		where
+			substr(c_phone, 1, 2) in
+				('11', '28', '26', '14', '19', '17', '30')
+			and c_acctbal > (
+				select
+					avg(c_acctbal)
+				from
+					customer
+				where
+					c_acctbal > 0.00
+					and substr(c_phone, 1, 2) in
+						('11', '28', '26', '14', '19', '17', '30')
+			)
+			and not exists (
+				select
+					*
+				from
+					orders
+				where
+					o_custkey = c_custkey
+			)
+	) as vip
+group by
+	cntrycode
+order by
+	cntrycode;
+                                                                               QUERY PLAN                                                                                
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=2461312.53..2461312.54 rows=3 width=20) (actual time=33154.104..33154.104 rows=7 loops=1)
+   Sort Key: (substr((customer.c_phone)::text, 1, 2))
+   Sort Method: quicksort  Memory: 25kB
+   Buffers: shared hit=82548 read=901738, temp read=101217 written=101211
+   InitPlan 1 (returns $0)
+     ->  Aggregate  (cost=158804.75..158804.76 rows=1 width=4) (actual time=1914.867..1914.868 rows=1 loops=1)
+           Buffers: shared hit=8 read=108978
+           ->  Bitmap Heap Scan on customer customer_1  (cost=19954.52..155933.94 rows=1148321 width=4) (actual time=325.784..1698.730 rows=1145581 loops=1)
+                 Recheck Cond: ((substr((c_phone)::text, 1, 2) = ANY ('{11,28,26,14,19,17,30}'::text[])) AND (c_acctbal > 0::double precision))
+                 Heap Blocks: exact=105836
+                 Buffers: shared hit=8 read=108978
+                 ->  Bitmap Index Scan on customer_c_phone_idx_c_acctbal  (cost=0.00..19667.44 rows=1148321 width=0) (actual time=292.713..292.713 rows=1145581 loops=1)
+                       Index Cond: (substr((c_phone)::text, 1, 2) = ANY ('{11,28,26,14,19,17,30}'::text[]))
+                       Buffers: shared hit=6 read=3144
+   ->  HashAggregate  (cost=2302507.71..2302507.75 rows=3 width=20) (actual time=33154.060..33154.061 rows=7 loops=1)
+         Group Key: substr((customer.c_phone)::text, 1, 2)
+         Buffers: shared hit=82545 read=901738, temp read=101217 written=101211
+         ->  Hash Anti Join  (cost=1978322.37..2301147.35 rows=181381 width=20) (actual time=24319.112..33078.848 rows=190953 loops=1)
+               Hash Cond: (customer.c_custkey = orders.o_custkey)
+               Buffers: shared hit=82545 read=901738, temp read=101217 written=101211
+               ->  Bitmap Heap Scan on customer  (cost=8760.16..125652.14 rows=421180 width=24) (actual time=2163.255..3489.088 rows=572860 loops=1)
+                     Recheck Cond: ((substr((c_phone)::text, 1, 2) = ANY ('{11,28,26,14,19,17,30}'::text[])) AND (c_acctbal > $0))
+                     Heap Blocks: exact=105505
+                     Buffers: shared hit=19 read=216060
+                     ->  Bitmap Index Scan on customer_c_phone_idx  (cost=0.00..8654.87 rows=421180 width=0) (actual time=2128.699..2128.699 rows=572860 loops=1)
+                           Index Cond: ((substr((c_phone)::text, 1, 2) = ANY ('{11,28,26,14,19,17,30}'::text[])) AND (c_acctbal > $0))
+                           Buffers: shared hit=17 read=110557
+               ->  Hash  (cost=1223153.98..1223153.98 rows=45495298 width=4) (actual time=22062.278..22062.278 rows=45000000 loops=1)
+                     Buckets: 33554432  Batches: 4  Memory Usage: 657382kB
+                     Buffers: shared hit=82523 read=685678, temp written=98898
+                     ->  Seq Scan on orders  (cost=0.00..1223153.98 rows=45495298 width=4) (actual time=0.038..11446.262 rows=45000000 loops=1)
+                           Buffers: shared hit=82523 read=685678
+ Planning time: 2.656 ms
+ Execution time: 33157.358 ms
+(34 rows)
+
+COMMIT;
+COMMIT

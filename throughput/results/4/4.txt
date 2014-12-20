@@ -1,0 +1,54 @@
+BEGIN;
+BEGIN
+EXPLAIN (ANALYZE, BUFFERS)
+select
+	o_orderpriority,
+	count(*) as order_count
+from
+	orders
+where
+	o_orderdate >= date '1994-02-01'
+	and o_orderdate < cast(date '1994-02-01' + interval '3 month' as date)
+	and exists (
+		select
+			*
+		from
+			lineitem
+		where
+			l_orderkey = o_orderkey
+			and l_commitdate < l_receiptdate
+	)
+group by
+	o_orderpriority
+order by
+	o_orderpriority;
+                                                                                    QUERY PLAN                                                                                     
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=2725916.34..2725916.35 rows=1 width=16) (actual time=44700.382..44700.383 rows=5 loops=1)
+   Sort Key: orders.o_orderpriority
+   Sort Method: quicksort  Memory: 25kB
+   Buffers: shared hit=6899574 read=2204855 dirtied=570 written=42628
+   ->  HashAggregate  (cost=2725916.32..2725916.33 rows=1 width=16) (actual time=44700.338..44700.340 rows=5 loops=1)
+         Group Key: orders.o_orderpriority
+         Buffers: shared hit=6899569 read=2204855 dirtied=570 written=42628
+         ->  Nested Loop Semi Join  (cost=17484.69..2725103.09 rows=162646 width=16) (actual time=85.424..43787.030 rows=1526037 loops=1)
+               Buffers: shared hit=6899569 read=2204855 dirtied=570 written=42628
+               ->  Bitmap Heap Scan on orders  (cost=17484.12..807315.59 rows=1695231 width=20) (actual time=85.384..18699.790 rows=1663700 loops=1)
+                     Recheck Cond: ((o_orderdate >= '1994-02-01'::date) AND (o_orderdate < '1994-05-01'::date))
+                     Rows Removed by Index Recheck: 43336300
+                     Heap Blocks: lossy=764403
+                     Buffers: shared hit=169439 read=594998 dirtied=570 written=11474
+                     ->  Bitmap Index Scan on orders_o_orderdate_o_orderkey_brin_idx  (cost=0.00..17060.31 rows=1695231 width=0) (actual time=84.845..84.845 rows=7644160 loops=1)
+                           Index Cond: ((o_orderdate >= '1994-02-01'::date) AND (o_orderdate < '1994-05-01'::date))
+                           Buffers: shared hit=8 read=26
+               ->  Index Scan using pk_lineitem on lineitem  (cost=0.57..7.79 rows=14 width=4) (actual time=0.014..0.014 rows=1 loops=1663700)
+                     Index Cond: (l_orderkey = orders.o_orderkey)
+                     Filter: (l_commitdate < l_receiptdate)
+                     Rows Removed by Filter: 1
+                     Buffers: shared hit=6730130 read=1609857 written=31154
+ Planning time: 2.875 ms
+ Execution time: 44700.541 ms
+(24 rows)
+
+COMMIT;
+COMMIT

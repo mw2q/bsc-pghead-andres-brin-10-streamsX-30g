@@ -1,0 +1,80 @@
+BEGIN;
+BEGIN
+EXPLAIN (ANALYZE, BUFFERS)
+select
+	cntrycode,
+	count(*) as numcust,
+	sum(c_acctbal) as totacctbal
+from
+	(
+		select
+			substr(c_phone, 1, 2) as cntrycode,
+			c_acctbal
+		from
+			customer
+		where
+			substr(c_phone, 1, 2) in
+				('20', '22', '12', '16', '27', '30', '23')
+			and c_acctbal > (
+				select
+					avg(c_acctbal)
+				from
+					customer
+				where
+					c_acctbal > 0.00
+					and substr(c_phone, 1, 2) in
+						('20', '22', '12', '16', '27', '30', '23')
+			)
+			and not exists (
+				select
+					*
+				from
+					orders
+				where
+					o_custkey = c_custkey
+			)
+	) as vip
+group by
+	cntrycode
+order by
+	cntrycode;
+                                                                               QUERY PLAN                                                                                
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=2460614.02..2460614.03 rows=3 width=20) (actual time=34097.954..34097.954 rows=7 loops=1)
+   Sort Key: (substr((customer.c_phone)::text, 1, 2))
+   Sort Method: quicksort  Memory: 25kB
+   Buffers: shared hit=208434 read=775865 written=90, temp read=101216 written=101210
+   InitPlan 1 (returns $0)
+     ->  Aggregate  (cost=158459.13..158459.14 rows=1 width=4) (actual time=2096.406..2096.406 rows=1 loops=1)
+           Buffers: shared hit=9 read=108973
+           ->  Bitmap Heap Scan on customer customer_1  (cost=19830.73..155607.61 rows=1140605 width=4) (actual time=319.739..1876.194 rows=1144397 loops=1)
+                 Recheck Cond: ((substr((c_phone)::text, 1, 2) = ANY ('{20,22,12,16,27,30,23}'::text[])) AND (c_acctbal > 0::double precision))
+                 Heap Blocks: exact=105836
+                 Buffers: shared hit=9 read=108973
+                 ->  Bitmap Index Scan on customer_c_phone_idx_c_acctbal  (cost=0.00..19545.58 rows=1140605 width=0) (actual time=288.334..288.334 rows=1144397 loops=1)
+                       Index Cond: (substr((c_phone)::text, 1, 2) = ANY ('{20,22,12,16,27,30,23}'::text[]))
+                       Buffers: shared hit=7 read=3139
+   ->  HashAggregate  (cost=2302154.81..2302154.86 rows=3 width=20) (actual time=34097.908..34097.911 rows=7 loops=1)
+         Group Key: substr((customer.c_phone)::text, 1, 2)
+         Buffers: shared hit=208431 read=775865 written=90, temp read=101216 written=101210
+         ->  Hash Anti Join  (cost=1978241.31..2300803.60 rows=180162 width=20) (actual time=25011.686..34024.488 rows=190475 loops=1)
+               Hash Cond: (customer.c_custkey = orders.o_custkey)
+               Buffers: shared hit=208431 read=775865 written=90, temp read=101216 written=101210
+               ->  Bitmap Heap Scan on customer  (cost=8679.11..125496.79 rows=418350 width=24) (actual time=2326.701..3632.566 rows=572365 loops=1)
+                     Recheck Cond: ((substr((c_phone)::text, 1, 2) = ANY ('{20,22,12,16,27,30,23}'::text[])) AND (c_acctbal > $0))
+                     Heap Blocks: exact=105521
+                     Buffers: shared hit=20 read=216072 written=90
+                     ->  Bitmap Index Scan on customer_c_phone_idx  (cost=0.00..8574.52 rows=418350 width=0) (actual time=2293.998..2293.998 rows=572365 loops=1)
+                           Index Cond: ((substr((c_phone)::text, 1, 2) = ANY ('{20,22,12,16,27,30,23}'::text[])) AND (c_acctbal > $0))
+                           Buffers: shared hit=18 read=110553
+               ->  Hash  (cost=1223153.98..1223153.98 rows=45495298 width=4) (actual time=22585.529..22585.529 rows=45000000 loops=1)
+                     Buckets: 33554432  Batches: 4  Memory Usage: 657382kB
+                     Buffers: shared hit=208408 read=559793, temp written=98898
+                     ->  Seq Scan on orders  (cost=0.00..1223153.98 rows=45495298 width=4) (actual time=0.012..11557.130 rows=45000000 loops=1)
+                           Buffers: shared hit=208408 read=559793
+ Planning time: 3.358 ms
+ Execution time: 34133.863 ms
+(34 rows)
+
+COMMIT;
+COMMIT

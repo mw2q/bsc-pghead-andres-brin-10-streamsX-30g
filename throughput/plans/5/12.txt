@@ -1,0 +1,49 @@
+BEGIN;
+BEGIN
+EXPLAIN
+select
+	l_shipmode,
+	sum(case
+		when o_orderpriority = '1-URGENT'
+			or o_orderpriority = '2-HIGH'
+			then 1
+		else 0
+	end) as high_line_count,
+	sum(case
+		when o_orderpriority <> '1-URGENT'
+			and o_orderpriority <> '2-HIGH'
+			then 1
+		else 0
+	end) as low_line_count
+from
+	orders,
+	lineitem
+where
+	o_orderkey = l_orderkey
+	and l_shipmode in ('FOB', 'REG AIR')
+	and l_commitdate < l_receiptdate
+	and l_shipdate < l_commitdate
+	and l_receiptdate >= date '1993-01-01'
+	and l_receiptdate < date '1993-01-01' + interval '1 year'
+group by
+	l_shipmode
+order by
+	l_shipmode;
+                                                                                                                                 QUERY PLAN                                                                                                                                 
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=9411668.68..9411668.69 rows=1 width=27)
+   Sort Key: lineitem.l_shipmode
+   ->  HashAggregate  (cost=9411668.66..9411668.67 rows=1 width=27)
+         Group Key: lineitem.l_shipmode
+         ->  Merge Join  (cost=7339972.92..9396446.93 rows=869813 width=27)
+               Merge Cond: (orders.o_orderkey = lineitem.l_orderkey)
+               ->  Index Scan using pk_orders on orders  (cost=0.56..1930826.13 rows=45045438 width=20)
+               ->  Sort  (cost=7339960.02..7342134.55 rows=869813 width=15)
+                     Sort Key: lineitem.l_orderkey
+                     ->  Seq Scan on lineitem  (cost=0.00..7254151.46 rows=869813 width=15)
+                           Filter: ((l_shipmode = ANY ('{FOB,"REG AIR"}'::bpchar[])) AND (l_commitdate < l_receiptdate) AND (l_shipdate < l_commitdate) AND (l_receiptdate >= '1993-01-01'::date) AND (l_receiptdate < '1994-01-01 00:00:00'::timestamp without time zone))
+ Planning time: 1.838 ms
+(12 rows)
+
+COMMIT;
+COMMIT

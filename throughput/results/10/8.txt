@@ -1,0 +1,115 @@
+BEGIN;
+BEGIN
+EXPLAIN (ANALYZE, BUFFERS)
+select
+	o_year,
+	sum(case
+		when nation = 'MOZAMBIQUE' then volume
+		else 0
+	end) / sum(volume) as mkt_share
+from
+	(
+		select
+			extract(year from o_orderdate) as o_year,
+			l_extendedprice * (1 - l_discount) as volume,
+			n2.n_name as nation
+		from
+			part,
+			supplier,
+			lineitem,
+			orders,
+			customer,
+			nation n1,
+			nation n2,
+			region
+		where
+			p_partkey = l_partkey
+			and s_suppkey = l_suppkey
+			and l_orderkey = o_orderkey
+			and o_custkey = c_custkey
+			and c_nationkey = n1.n_nationkey
+			and n1.n_regionkey = r_regionkey
+			and r_name = 'AFRICA'
+			and s_nationkey = n2.n_nationkey
+			and o_orderdate between date '1995-01-01' and date '1996-12-31'
+			and p_type = 'LARGE BRUSHED BRASS'
+	) as all_nations
+group by
+	o_year
+order by
+	o_year;
+                                                                                                QUERY PLAN                                                                                                
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=5460323.84..5460325.67 rows=733 width=38) (actual time=51690.751..51690.751 rows=2 loops=1)
+   Sort Key: (date_part('year'::text, (orders.o_orderdate)::timestamp without time zone))
+   Sort Method: quicksort  Memory: 25kB
+   Buffers: shared hit=5981925 read=2183968 dirtied=7546
+   ->  HashAggregate  (cost=5460276.13..5460288.96 rows=733 width=38) (actual time=51690.707..51690.709 rows=2 loops=1)
+         Group Key: date_part('year'::text, (orders.o_orderdate)::timestamp without time zone)
+         Buffers: shared hit=5981922 read=2183968 dirtied=7546
+         ->  Hash Join  (cost=114218.97..5458766.89 rows=75462 width=38) (actual time=6702.465..51566.680 rows=72169 loops=1)
+               Hash Cond: (supplier.s_nationkey = n2.n_nationkey)
+               Buffers: shared hit=5981922 read=2183968 dirtied=7546
+               ->  Nested Loop  (cost=114217.41..5457350.42 rows=75462 width=16) (actual time=6702.422..51441.519 rows=72169 loops=1)
+                     Buffers: shared hit=5981918 read=2183968 dirtied=7546
+                     ->  Hash Join  (cost=114216.99..5423191.65 rows=75462 width=16) (actual time=6702.409..50892.837 rows=72169 loops=1)
+                           Hash Cond: (orders.o_custkey = customer.c_custkey)
+                           Buffers: shared hit=5693165 read=2183696 dirtied=7546
+                           ->  Nested Loop  (cost=1262.36..5308067.49 rows=377310 width=20) (actual time=22.486..43957.217 rows=360898 loops=1)
+                                 Buffers: shared hit=5269805 read=2077858 dirtied=7546
+                                 ->  Nested Loop  (cost=1261.79..4540136.74 rows=1239283 width=16) (actual time=22.411..18223.675 rows=1189341 loops=1)
+                                       Buffers: shared hit=324141 read=1070321 dirtied=7546
+                                       ->  Bitmap Heap Scan on part  (cost=1261.22..85403.61 rows=40860 width=4) (actual time=22.336..460.667 rows=39668 loops=1)
+                                             Recheck Cond: ((p_type)::text = 'LARGE BRUSHED BRASS'::text)
+                                             Heap Blocks: exact=34049
+                                             Buffers: shared hit=1 read=34248
+                                             ->  Bitmap Index Scan on part_p_type_p_partkey_idx  (cost=0.00..1251.01 rows=40860 width=0) (actual time=14.251..14.251 rows=39668 loops=1)
+                                                   Index Cond: ((p_type)::text = 'LARGE BRUSHED BRASS'::text)
+                                                   Buffers: shared read=200
+                                       ->  Index Scan using lineitem_l_partkey_l_quantity_idx on lineitem  (cost=0.57..108.71 rows=31 width=20) (actual time=0.029..0.436 rows=30 loops=39668)
+                                             Index Cond: (l_partkey = part.p_partkey)
+                                             Buffers: shared hit=324140 read=1036073 dirtied=7546
+                                 ->  Index Scan using pk_orders on orders  (cost=0.56..0.61 rows=1 width=12) (actual time=0.021..0.021 rows=0 loops=1189341)
+                                       Index Cond: (o_orderkey = lineitem.l_orderkey)
+                                       Filter: ((o_orderdate >= '1995-01-01'::date) AND (o_orderdate <= '1996-12-31'::date))
+                                       Rows Removed by Filter: 1
+                                       Buffers: shared hit=4945664 read=1007537
+                           ->  Hash  (cost=101704.63..101704.63 rows=900000 width=4) (actual time=6674.396..6674.396 rows=899395 loops=1)
+                                 Buckets: 1048576  Batches: 1  Memory Usage: 39812kB
+                                 Buffers: shared hit=423360 read=105838
+                                 ->  Nested Loop  (cost=1896.08..101704.63 rows=900000 width=4) (actual time=11.477..6368.781 rows=899395 loops=1)
+                                       Buffers: shared hit=423360 read=105838
+                                       ->  Hash Join  (cost=1.07..2.47 rows=5 width=4) (actual time=0.042..0.064 rows=5 loops=1)
+                                             Hash Cond: (n1.n_regionkey = region.r_regionkey)
+                                             Buffers: shared hit=2
+                                             ->  Seq Scan on nation n1  (cost=0.00..1.25 rows=25 width=8) (actual time=0.004..0.011 rows=25 loops=1)
+                                                   Buffers: shared hit=1
+                                             ->  Hash  (cost=1.06..1.06 rows=1 width=4) (actual time=0.015..0.015 rows=1 loops=1)
+                                                   Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                                                   Buffers: shared hit=1
+                                                   ->  Seq Scan on region  (cost=0.00..1.06 rows=1 width=4) (actual time=0.009..0.011 rows=1 loops=1)
+                                                         Filter: (r_name = 'AFRICA'::bpchar)
+                                                         Rows Removed by Filter: 4
+                                                         Buffers: shared hit=1
+                                       ->  Bitmap Heap Scan on customer  (cost=1895.00..18540.43 rows=180000 width=8) (actual time=11.296..1243.481 rows=179879 loops=5)
+                                             Recheck Cond: (c_nationkey = n1.n_nationkey)
+                                             Rows Removed by Index Recheck: 4320121
+                                             Heap Blocks: lossy=529180
+                                             Buffers: shared hit=423358 read=105838
+                                             ->  Bitmap Index Scan on customer_c_nationkey_c_custkey_brin_idx  (cost=0.00..1850.00 rows=180000 width=0) (actual time=11.218..11.218 rows=1058560 loops=5)
+                                                   Index Cond: (c_nationkey = n1.n_nationkey)
+                                                   Buffers: shared hit=12 read=4
+                     ->  Index Scan using pk_supplier on supplier  (cost=0.42..0.44 rows=1 width=8) (actual time=0.006..0.007 rows=1 loops=72169)
+                           Index Cond: (s_suppkey = lineitem.l_suppkey)
+                           Buffers: shared hit=288753 read=272
+               ->  Hash  (cost=1.25..1.25 rows=25 width=30) (actual time=0.016..0.016 rows=25 loops=1)
+                     Buckets: 1024  Batches: 1  Memory Usage: 10kB
+                     Buffers: shared hit=1
+                     ->  Seq Scan on nation n2  (cost=0.00..1.25 rows=25 width=30) (actual time=0.004..0.007 rows=25 loops=1)
+                           Buffers: shared hit=1
+ Planning time: 7.036 ms
+ Execution time: 51691.625 ms
+(69 rows)
+
+COMMIT;
+COMMIT

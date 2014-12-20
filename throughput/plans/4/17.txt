@@ -1,0 +1,39 @@
+BEGIN;
+BEGIN
+EXPLAIN
+select
+	sum(l_extendedprice) / 7.0 as avg_yearly
+from
+	lineitem,
+	part
+where
+	p_partkey = l_partkey
+	and p_brand = 'Brand#41'
+	and p_container = 'JUMBO CAN'
+	and l_quantity < (
+		select
+			0.2 * avg(l_quantity)
+		from
+			lineitem
+		where
+			l_partkey = p_partkey
+	);
+                                                                 QUERY PLAN                                                                  
+---------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=347081.58..347081.59 rows=1 width=4)
+   ->  Nested Loop  (cost=220.71..346929.28 rows=60920 width=4)
+         ->  Bitmap Heap Scan on part  (cost=210.94..20117.15 rows=6086 width=4)
+               Recheck Cond: ((p_container = 'JUMBO CAN'::bpchar) AND (p_brand = 'Brand#41'::bpchar))
+               ->  Bitmap Index Scan on part_p_container_p_brand_p_partkey_idx  (cost=0.00..209.42 rows=6086 width=0)
+                     Index Cond: ((p_container = 'JUMBO CAN'::bpchar) AND (p_brand = 'Brand#41'::bpchar))
+         ->  Index Scan using lineitem_l_partkey_l_quantity_idx on lineitem  (cost=9.77..53.60 rows=10 width=12)
+               Index Cond: ((l_partkey = part.p_partkey) AND (l_quantity < (SubPlan 1)))
+               SubPlan 1
+                 ->  Aggregate  (cost=9.19..9.21 rows=1 width=4)
+                       ->  Index Only Scan using lineitem_l_partkey_l_quantity_idx on lineitem lineitem_1  (cost=0.57..9.11 rows=31 width=4)
+                             Index Cond: (l_partkey = part.p_partkey)
+ Planning time: 2.028 ms
+(13 rows)
+
+COMMIT;
+COMMIT

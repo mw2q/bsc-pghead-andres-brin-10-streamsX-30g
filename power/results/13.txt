@@ -1,0 +1,53 @@
+BEGIN;
+BEGIN
+EXPLAIN (ANALYZE, BUFFERS)
+select
+	c_count,
+	count(*) as custdist
+from
+	(
+		select
+			c_custkey,
+			count(o_orderkey)
+		from
+			customer left outer join orders on
+				c_custkey = o_custkey
+				and o_comment not like '%unusual%deposits%'
+		group by
+			c_custkey
+	) as c_orders (c_custkey, c_count)
+group by
+	c_count
+order by
+	custdist desc,
+	c_count desc;
+                                                                     QUERY PLAN                                                                     
+----------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=2647678.77..2647679.27 rows=200 width=8) (actual time=81158.357..81158.359 rows=45 loops=1)
+   Sort Key: (count(*)), (count(orders.o_orderkey))
+   Sort Method: quicksort  Memory: 27kB
+   Buffers: shared hit=689159 read=177285
+   ->  HashAggregate  (cost=2647669.12..2647671.12 rows=200 width=8) (actual time=81158.259..81158.263 rows=45 loops=1)
+         Group Key: count(orders.o_orderkey)
+         Buffers: shared hit=689156 read=177285
+         ->  HashAggregate  (cost=2535169.12..2580169.12 rows=4500000 width=8) (actual time=78788.463..80162.737 rows=4500000 loops=1)
+               Group Key: customer.c_custkey
+               Buffers: shared hit=689156 read=177285
+               ->  Hash Right Join  (cost=207086.00..2311966.87 rows=44640451 width=8) (actual time=3218.484..53003.219 rows=46058703 loops=1)
+                     Hash Cond: (orders.o_custkey = customer.c_custkey)
+                     Buffers: shared hit=689156 read=177285
+                     ->  Seq Scan on orders  (cost=0.00..1323672.98 rows=44640451 width=8) (actual time=0.018..23083.701 rows=44558625 loops=1)
+                           Filter: ((o_comment)::text !~~ '%unusual%deposits%'::text)
+                           Rows Removed by Filter: 486375
+                           Buffers: shared hit=689154 read=71451
+                     ->  Hash  (cost=150836.00..150836.00 rows=4500000 width=4) (actual time=3195.740..3195.740 rows=4500000 loops=1)
+                           Buckets: 8388608  Batches: 1  Memory Usage: 223740kB
+                           Buffers: shared hit=2 read=105834
+                           ->  Seq Scan on customer  (cost=0.00..150836.00 rows=4500000 width=4) (actual time=0.009..1957.021 rows=4500000 loops=1)
+                                 Buffers: shared hit=2 read=105834
+ Planning time: 3.833 ms
+ Execution time: 81189.131 ms
+(24 rows)
+
+COMMIT;
+COMMIT

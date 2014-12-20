@@ -1,0 +1,11 @@
+Tue Dec  2 06:02:19 CET 2014: Stream 9 : Starting Refresh Stream 2...
+BEGIN
+CREATE TABLE
+COPY 45000
+CREATE INDEX
+ANALYZE
+DELETE 179460
+DELETE 45000
+COMMIT
+Tue Dec  2 06:04:05 CET 2014: Stream 9 : Refresh Stream 2 completed.
+Stream 9 : Elapsed time for Refresh Stream 2 : 106 seconds

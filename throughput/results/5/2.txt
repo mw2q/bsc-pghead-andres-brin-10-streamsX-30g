@@ -1,0 +1,128 @@
+BEGIN;
+BEGIN
+EXPLAIN (ANALYZE, BUFFERS)
+select
+	s_acctbal,
+	s_name,
+	n_name,
+	p_partkey,
+	p_mfgr,
+	s_address,
+	s_phone,
+	s_comment
+from
+	part,
+	supplier,
+	partsupp,
+	nation,
+	region
+where
+	p_partkey = ps_partkey
+	and s_suppkey = ps_suppkey
+	and p_size = 21
+	and p_type like '%COPPER'
+	and s_nationkey = n_nationkey
+	and n_regionkey = r_regionkey
+	and r_name = 'EUROPE'
+	and ps_supplycost = (
+		select
+			min(ps_supplycost)
+		from
+			partsupp,
+			supplier,
+			nation,
+			region
+		where
+			p_partkey = ps_partkey
+			and s_suppkey = ps_suppkey
+			and s_nationkey = n_nationkey
+			and n_regionkey = r_regionkey
+			and r_name = 'EUROPE'
+	)
+order by
+	s_acctbal desc,
+	n_name,
+	s_name,
+	p_partkey
+LIMIT 100;
+                                                                                             QUERY PLAN                                                                                             
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=3115013.49..3115013.49 rows=1 width=190) (actual time=28497.675..28497.699 rows=100 loops=1)
+   Buffers: shared hit=669049 read=569236 written=70, temp read=108680 written=108684
+   ->  Sort  (cost=3115013.49..3115013.49 rows=1 width=190) (actual time=28497.674..28497.690 rows=100 loops=1)
+         Sort Key: supplier.s_acctbal, nation.n_name, supplier.s_name, part.p_partkey
+         Sort Method: top-N heapsort  Memory: 52kB
+         Buffers: shared hit=669049 read=569236 written=70, temp read=108680 written=108684
+         ->  Merge Join  (cost=1431184.22..3115013.48 rows=1 width=190) (actual time=21979.200..28484.433 rows=14015 loops=1)
+               Merge Cond: (part.p_partkey = partsupp.ps_partkey)
+               Join Filter: (partsupp.ps_supplycost = (SubPlan 1))
+               Rows Removed by Join Filter: 4937
+               Buffers: shared hit=669041 read=569236 written=70, temp read=108680 written=108684
+               ->  Index Scan using pk_part on part  (cost=0.43..307386.43 rows=24124 width=30) (actual time=0.213..2936.476 rows=23931 loops=1)
+                     Filter: (((p_type)::text ~~ '%COPPER'::text) AND (p_size = 21))
+                     Rows Removed by Filter: 5976069
+                     Buffers: shared hit=111897 read=28310 written=28
+               ->  Sort  (cost=1431183.48..1443166.50 rows=4793205 width=168) (actual time=21978.603..23533.967 rows=4810070 loops=1)
+                     Sort Key: partsupp.ps_partkey
+                     Sort Method: external sort  Disk: 869472kB
+                     Buffers: shared hit=32694 read=512878, temp read=108680 written=108684
+                     ->  Hash Join  (cost=8520.81..899316.06 rows=4793205 width=168) (actual time=469.472..14794.494 rows=4810240 loops=1)
+                           Hash Cond: (partsupp.ps_suppkey = supplier.s_suppkey)
+                           Buffers: shared hit=32694 read=512878
+                           ->  Seq Scan on partsupp  (cost=0.00..752864.78 rows=23999578 width=12) (actual time=0.013..5784.336 rows=24000000 loops=1)
+                                 Buffers: shared hit=35 read=512834
+                           ->  Hash  (cost=7770.81..7770.81 rows=60000 width=164) (actual time=469.216..469.216 rows=60128 loops=1)
+                                 Buckets: 65536  Batches: 1  Memory Usage: 12192kB
+                                 Buffers: shared hit=32659 read=44
+                                 ->  Nested Loop  (cost=394.07..7770.81 rows=60000 width=164) (actual time=0.742..433.776 rows=60128 loops=1)
+                                       Buffers: shared hit=32659 read=44
+                                       ->  Hash Join  (cost=1.07..2.47 rows=5 width=30) (actual time=0.024..0.045 rows=5 loops=1)
+                                             Hash Cond: (nation.n_regionkey = region.r_regionkey)
+                                             Buffers: shared hit=2
+                                             ->  Seq Scan on nation  (cost=0.00..1.25 rows=25 width=34) (actual time=0.002..0.009 rows=25 loops=1)
+                                                   Buffers: shared hit=1
+                                             ->  Hash  (cost=1.06..1.06 rows=1 width=4) (actual time=0.009..0.009 rows=1 loops=1)
+                                                   Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                                                   Buffers: shared hit=1
+                                                   ->  Seq Scan on region  (cost=0.00..1.06 rows=1 width=4) (actual time=0.006..0.007 rows=1 loops=1)
+                                                         Filter: (r_name = 'EUROPE'::bpchar)
+                                                         Rows Removed by Filter: 4
+                                                         Buffers: shared hit=1
+                                       ->  Bitmap Heap Scan on supplier  (cost=393.00..1433.67 rows=12000 width=142) (actual time=0.673..84.222 rows=12026 loops=5)
+                                             Recheck Cond: (s_nationkey = nation.n_nationkey)
+                                             Rows Removed by Index Recheck: 287974
+                                             Heap Blocks: lossy=32695
+                                             Buffers: shared hit=32657 read=44
+                                             ->  Bitmap Index Scan on supplier_s_nationkey_s_suppkey_brin_idx  (cost=0.00..390.00 rows=12000 width=0) (actual time=0.652..0.652 rows=66560 loops=5)
+                                                   Index Cond: (s_nationkey = nation.n_nationkey)
+                                                   Buffers: shared hit=4 read=2
+               SubPlan 1
+                 ->  Aggregate  (cost=70.15..70.16 rows=1 width=4) (actual time=0.067..0.067 rows=1 loops=18952)
+                       Buffers: shared hit=524450 read=28048 written=42
+                       ->  Nested Loop  (cost=1.00..70.15 rows=1 width=4) (actual time=0.044..0.061 rows=2 loops=18952)
+                             Join Filter: (nation_1.n_regionkey = region_1.r_regionkey)
+                             Rows Removed by Join Filter: 2
+                             Buffers: shared hit=524450 read=28048 written=42
+                             ->  Seq Scan on region region_1  (cost=0.00..1.06 rows=1 width=4) (actual time=0.002..0.003 rows=1 loops=18952)
+                                   Filter: (r_name = 'EUROPE'::bpchar)
+                                   Rows Removed by Filter: 4
+                                   Buffers: shared hit=18951 read=1
+                             ->  Nested Loop  (cost=1.00..69.01 rows=6 width=8) (actual time=0.032..0.057 rows=4 loops=18952)
+                                   Buffers: shared hit=505499 read=28047 written=42
+                                   ->  Nested Loop  (cost=0.86..68.01 rows=6 width=8) (actual time=0.030..0.048 rows=4 loops=18952)
+                                         Buffers: shared hit=353885 read=28045 written=42
+                                         ->  Index Scan using pk_partsupp on partsupp partsupp_1  (cost=0.44..17.29 rows=6 width=8) (actual time=0.023..0.025 rows=4 loops=18952)
+                                               Index Cond: (part.p_partkey = ps_partkey)
+                                               Buffers: shared hit=50260 read=28034 written=42
+                                         ->  Index Scan using pk_supplier on supplier supplier_1  (cost=0.42..8.44 rows=1 width=8) (actual time=0.004..0.005 rows=1 loops=75808)
+                                               Index Cond: (s_suppkey = partsupp_1.ps_suppkey)
+                                               Buffers: shared hit=303625 read=11
+                                   ->  Index Scan using pk_nation on nation nation_1  (cost=0.14..0.16 rows=1 width=8) (actual time=0.001..0.002 rows=1 loops=75808)
+                                         Index Cond: (n_nationkey = supplier_1.s_nationkey)
+                                         Buffers: shared hit=151614 read=2
+ Planning time: 4.600 ms
+ Execution time: 28573.319 ms
+(75 rows)
+
+COMMIT;
+COMMIT

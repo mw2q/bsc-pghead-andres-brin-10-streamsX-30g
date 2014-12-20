@@ -1,0 +1,80 @@
+BEGIN;
+BEGIN
+EXPLAIN (ANALYZE, BUFFERS)
+select
+	cntrycode,
+	count(*) as numcust,
+	sum(c_acctbal) as totacctbal
+from
+	(
+		select
+			substr(c_phone, 1, 2) as cntrycode,
+			c_acctbal
+		from
+			customer
+		where
+			substr(c_phone, 1, 2) in
+				('26', '27', '23', '25', '21', '30', '19')
+			and c_acctbal > (
+				select
+					avg(c_acctbal)
+				from
+					customer
+				where
+					c_acctbal > 0.00
+					and substr(c_phone, 1, 2) in
+						('26', '27', '23', '25', '21', '30', '19')
+			)
+			and not exists (
+				select
+					*
+				from
+					orders
+				where
+					o_custkey = c_custkey
+			)
+	) as vip
+group by
+	cntrycode
+order by
+	cntrycode;
+                                                                               QUERY PLAN                                                                                
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=2456329.00..2456329.01 rows=3 width=20) (actual time=35104.005..35104.006 rows=7 loops=1)
+   Sort Key: (substr((customer.c_phone)::text, 1, 2))
+   Sort Method: quicksort  Memory: 25kB
+   Buffers: shared hit=220874 read=761883 written=182, temp read=101313 written=101307
+   InitPlan 1 (returns $0)
+     ->  Aggregate  (cost=158440.73..158440.74 rows=1 width=4) (actual time=1937.060..1937.060 rows=1 loops=1)
+           Buffers: shared hit=10 read=108975 written=181
+           ->  Bitmap Heap Scan on customer customer_1  (cost=19826.83..155590.48 rows=1140101 width=4) (actual time=338.748..1722.101 rows=1144511 loops=1)
+                 Recheck Cond: ((substr((c_phone)::text, 1, 2) = ANY ('{26,27,23,25,21,30,19}'::text[])) AND (c_acctbal > 0::double precision))
+                 Heap Blocks: exact=105836
+                 Buffers: shared hit=10 read=108975 written=181
+                 ->  Bitmap Index Scan on customer_c_phone_idx_c_acctbal  (cost=0.00..19541.80 rows=1140101 width=0) (actual time=306.121..306.121 rows=1144511 loops=1)
+                       Index Cond: (substr((c_phone)::text, 1, 2) = ANY ('{26,27,23,25,21,30,19}'::text[]))
+                       Buffers: shared hit=8 read=3141 written=1
+   ->  HashAggregate  (cost=2297888.19..2297888.23 rows=3 width=20) (actual time=35103.961..35103.963 rows=7 loops=1)
+         Group Key: substr((customer.c_phone)::text, 1, 2)
+         Buffers: shared hit=220871 read=761883 written=182, temp read=101313 written=101307
+         ->  Hash Anti Join  (cost=1974344.34..2296537.57 rows=180082 width=20) (actual time=25980.188..35029.225 rows=190529 loops=1)
+               Hash Cond: (customer.c_custkey = orders.o_custkey)
+               Buffers: shared hit=220871 read=761883 written=182, temp read=101313 written=101307
+               ->  Bitmap Heap Scan on customer  (cost=8677.24..125490.07 rows=418165 width=24) (actual time=2180.091..3548.637 rows=572135 loops=1)
+                     Recheck Cond: ((substr((c_phone)::text, 1, 2) = ANY ('{26,27,23,25,21,30,19}'::text[])) AND (c_acctbal > $0))
+                     Heap Blocks: exact=105495
+                     Buffers: shared hit=21 read=216048 written=182
+                     ->  Bitmap Index Scan on customer_c_phone_idx  (cost=0.00..8572.70 rows=418165 width=0) (actual time=2145.371..2145.371 rows=572135 loops=1)
+                           Index Cond: ((substr((c_phone)::text, 1, 2) = ANY ('{26,27,23,25,21,30,19}'::text[])) AND (c_acctbal > $0))
+                           Buffers: shared hit=19 read=110555 written=182
+               ->  Hash  (cost=1220735.38..1220735.38 rows=45405338 width=4) (actual time=23655.931..23655.931 rows=45045000 loops=1)
+                     Buckets: 33554432  Batches: 4  Memory Usage: 657773kB
+                     Buffers: shared hit=220847 read=545835, temp written=98998
+                     ->  Seq Scan on orders  (cost=0.00..1220735.38 rows=45405338 width=4) (actual time=0.030..11532.086 rows=45045000 loops=1)
+                           Buffers: shared hit=220847 read=545835
+ Planning time: 3.104 ms
+ Execution time: 35141.216 ms
+(34 rows)
+
+COMMIT;
+COMMIT
